@@ -1,0 +1,9 @@
+[submodule "DaisySP"]
+	path = DaisySP
+	url = git@github.com:electro-smith/DaisySP.git
+[submodule "Terrarium"]
+	path = Terrarium
+	url = git@github.com:PedalPCB/Terrarium.git
+[submodule "libDaisy"]
+	path = libDaisy
+	url = git@github.com:electro-smith/libDaisy.git
