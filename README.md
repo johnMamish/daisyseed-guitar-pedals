@@ -7,12 +7,20 @@ https://github.com/fxwiegand/terrarium-reverb/
 
 1. Install toolchain
 
+Linux
+
+```bash
+sudo apt install build-essential make cmake gcc-arm-none-eabi binutils-arm-none-eabi dfu-util
+```
+
+Mac
+
 ```bash
 brew install gcc-arm-embedded
 brew install dfu-util
 ```
 
-2. Fetch and make depedencies
+2. Fetch and make dependencies
 
 ```bash
 git submodule update --init --recursive
@@ -28,7 +36,7 @@ Hold down reset, hold down boot, let go of reset, let go of boot (while plugged 
 
 ```bash
 # list devices to find device address and settings
-dfu-util --devices
+dfu-util --list
 # upload (aka download) to device
 dfu-util --device 0483:df11 --alt 0 --download build/reverb.bin --dfuse-address 0x08000000
 ```
