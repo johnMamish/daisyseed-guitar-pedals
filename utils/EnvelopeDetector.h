@@ -2,9 +2,6 @@
 #ifndef DSY_ENVELOPE_DETECTOR_H
 #define DSY_ENVELOPE_DETECTOR_H
 
-#include <stdlib.h>
-#include "Utility/dsp.h"
-
 #ifndef min
 #define min(a, b) ((a < b) ? a : b)
 #endif

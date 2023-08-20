@@ -33,8 +33,6 @@ public:
     void SetAttackTime(float attackTimeSeconds)
     {
         attackSamples_ = attackTimeSeconds * sampleRate_;
-        if (attackSamples_ < 1)
-            attackSamples_ = 1; // ensure no divide by zero
         if (sampleCounter_ > attackSamples_)
             sampleCounter_ = attackSamples_; // deal with jumps
     }
@@ -42,8 +40,6 @@ public:
     void SetReleaseTime(float releaseTimeSeconds)
     {
         releaseSamples_ = releaseTimeSeconds * sampleRate_;
-        if (releaseSamples_ < 1)
-            releaseSamples_ = 1; // ensure no divide by zero
         if ((releaseSamples_ - sampleCounter_) < 0)
             sampleCounter_ = 0; // deal with jumps
     }
@@ -69,6 +65,10 @@ public:
             {
                 sampleCounter_++; // step
             }
+            if (attackSamples_ == 0)
+            {
+                return 1.0f; // ensure no divide by zero
+            }
             return (float)sampleCounter_ / (float)attackSamples_;
         case ARENV_ON:
             if (!on)
@@ -91,6 +91,10 @@ public:
             else
             {
                 sampleCounter_--; // step
+            }
+            if (releaseSamples_ == 0)
+            {
+                return 0.0f; // ensure no divide by zero
             }
             return (float)sampleCounter_ / (float)releaseSamples_;
         case ARENV_OFF:
