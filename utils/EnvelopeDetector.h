@@ -5,6 +5,10 @@
 #include <stdlib.h>
 #include "Utility/dsp.h"
 
+#ifndef min
+#define min(a, b) ((a < b) ? a : b)
+#endif
+
 // Simple implementation based on Max MSP `rampsmooth~`
 class EnvelopeDetector
 {
@@ -15,7 +19,7 @@ public:
   void Init(size_t rampSamples)
   {
     state_ = 0;
-    step_ = 1.0f / (rampSamples < 1 ? 1 : rampSamples);
+    step_ = 1.0f / (float)(rampSamples < 1 ? 1 : rampSamples);
   }
 
   void ProcessBlock(float *in, float *out, size_t size)
@@ -29,10 +33,10 @@ public:
   inline float Process(float in)
   {
     float diff = in - state_;
-    if (diff > 0)
-      state_ += step_;
-    else if (diff < 0)
-      state_ -= step_;
+    if (diff >= 0)
+      state_ += min(diff, step_);
+    else
+      state_ -= min(fabsf(diff), step_);
     return state_;
   }
 
