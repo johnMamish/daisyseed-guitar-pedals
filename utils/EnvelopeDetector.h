@@ -2,6 +2,8 @@
 #ifndef DSY_ENVELOPE_DETECTOR_H
 #define DSY_ENVELOPE_DETECTOR_H
 
+#include <math.h>
+
 #ifndef min
 #define min(a, b) ((a < b) ? a : b)
 #endif
