@@ -1,6 +1,7 @@
 #include "daisy_petal.h"
 #include "daisysp.h"
 #include "terrarium.h"
+#include "NoiseGate.h"
 
 using namespace daisy;
 using namespace daisysp;
@@ -10,14 +11,52 @@ using namespace terrarium;
 DaisyPetal hw;
 bool bypass;
 
-// Parameter
+Parameter blendCtrl, noiseGateCtrl;
+Led led1, led2;
 
-Led led1;
+CrossFade blend;
+NoiseGate noiseGate;
+
+inline void silence(const float *in, float *out, unsigned int size)
+{
+    for (size_t i = 0; i < size; i++)
+    {
+        out[i] = 0;
+    }
+}
+
+inline void passthru(const float *in, float *out, unsigned int size)
+{
+    for (size_t i = 0; i < size; i += 2)
+    {
+        out[i] = in[i];         // left
+        out[i + 1] = in[i + 1]; // right
+    }
+}
+
+inline void distort(const float *in, float *out, unsigned int size)
+{
+    for (size_t i = 0; i < size; i += 2)
+    {
+        // distort
+        out[i] = sqrt(in[i]);
+        out[i + 1] = sqrt(in[i + 1]);
+
+        // apply wet-dry blend
+        out[i] = blend.Process((float &)in[i], out[i]);
+        out[i + 1] = blend.Process((float &)in[i + 1], out[i + 1]);
+    }
+}
 
 void callback(const float *in, float *out, unsigned int size)
 {
     hw.ProcessAllControls();
     led1.Update();
+    led2.Update();
+    blend.SetPos(blendCtrl.Process());
+    noiseGateCtrl.Process();
+    noiseGate.SetThresholds(noiseGateCtrl.Value() + 2, noiseGateCtrl.Value());
+    hw.switches[Terrarium::FOOTSWITCH_2].Debounce();
 
     if (hw.switches[Terrarium::FOOTSWITCH_1].RisingEdge())
     {
@@ -25,38 +64,38 @@ void callback(const float *in, float *out, unsigned int size)
         led1.Set(bypass ? 0.0f : 1.0f);
     }
 
-    for (size_t i = 0; i < size; i += 2)
+    if (bypass)
     {
-        if (bypass)
-        {
-            out[i] = in[i];         // left
-            out[i + 1] = in[i + 1]; // right
-        }
-        else
-        {
-            out[i] = sqrt(4 * in[i]) / 2;
-            out[i + 1] = sqrt(4 * in[i + 1]) / 2;
-        }
+        passthru(in, out, size);
     }
+    else if (hw.switches[Terrarium::FOOTSWITCH_2].Pressed())
+    {
+        silence(in, out, size); // momentary killswitch
+    }
+    else
+    {
+        distort(in, out, size);
+    }
+
+    // apply noise gate (in place)
+    noiseGate.ProcessBlock(out, out, size);
+    led2.Set(noiseGate.IsOpen() ? 1.0f : 0.0f);
 }
 
 int main(void)
 {
     hw.Init();
     hw.SetAudioBlockSize(12);
+    blend.Init(CROSSFADE_CPOW);
+    noiseGate.Init(hw.AudioSampleRate(), 0);
 
-    // vtime.Init(hw.knob[Terrarium::KNOB_1], 0.6f, 0.999f, Parameter::LOGARITHMIC);
-    // vfreq.Init(hw.knob[Terrarium::KNOB_2], 500.0f, 20000.0f, Parameter::LOGARITHMIC);
-    // vsend.Init(hw.knob[Terrarium::KNOB_3], 0.0f, 1.0f, Parameter::LINEAR);
-    // lfo_speed.Init(hw.knob[Terrarium::KNOB_4], 0.005f, 0.15f, Parameter::LOGARITHMIC);
-    // amplitude.Init(hw.knob[Terrarium::KNOB_5], 0.65f, 0.999f, Parameter::LINEAR);
-    // verb.Init(samplerate);
-
-    // lfo.Init(samplerate);
-
-    led1.Init(hw.seed.GetPin(Terrarium::LED_1),false);
-    // led2.Init(hw.seed.GetPin(Terrarium::LED_2),false, 10000.0f);
+    blendCtrl.Init(hw.knob[Terrarium::KNOB_2], 0.0f, 1.0f, Parameter::LINEAR);
+    noiseGateCtrl.Init(hw.knob[Terrarium::KNOB_4], -40.0f, 1.0f, Parameter::LINEAR);
+    led1.Init(hw.seed.GetPin(Terrarium::LED_1), false);
     led1.Update();
+    led2.Init(hw.seed.GetPin(Terrarium::LED_2), false);
+    led2.Set(0.0f);
+    led2.Update();
     bypass = true;
 
     hw.StartAdc();

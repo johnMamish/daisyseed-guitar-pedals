@@ -1,0 +1,10 @@
+# Cmake generated files
+*.cmake
+Makefile
+CMakeCache.txt
+CMakeFiles/*
+_deps/*
+
+# build products
+utils_unittests
+*.a
