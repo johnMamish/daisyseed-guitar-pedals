@@ -11,7 +11,7 @@ using namespace terrarium;
 // Declare a local daisy_petal for hardware access
 DaisyPetal hw;
 
-Parameter vtime, vfreq, vsend, lfo_speed, amplitude;
+Parameter volume_in, compression_ratio, compression_threshold;
 bool      bypass;
 ReverbSc  verb;
 Oscillator lfo;
@@ -25,6 +25,7 @@ static float DSY_SDRAM_BSS base_buff[BUFF_LEN] = { 0 };
 
 #define AUDIO_BLOCKSIZE 16
 
+// State management for looper application
 typedef enum record_state_e {
     RECORD_STATE_IDLE,
     RECORD_STATE_INITIAL_LOOP,
@@ -36,9 +37,15 @@ typedef struct loop_state {
     record_state_e state;
     int32_t size;
     int32_t head;
+
+    int32_t record_buffer_index;
+    int32_t modify_buffer_index;
 } loop_state_t;
 
 loop_state_t loop_state = {.state = RECORD_STATE_IDLE, .size = -1, .head = 0};
+
+// compression
+Compressor input_compressor;
 
 // expected bounce length: 500 audio samples = ~10ms
 Debouncer fs1_debounce(500);
@@ -69,7 +76,7 @@ void callback(const float *in, float *out, unsigned int size)
         }
     }
 
-    if ((fs1_debounce.get() == true) && (fs1_debounce.time_in_current_state() > 20000)) {
+    if ((fs1_debounce.get() == true) && (fs1_debounce.time_in_current_state() > 15000)) {
         loop_state.state = RECORD_STATE_IDLE;
     }
 
@@ -88,31 +95,38 @@ void callback(const float *in, float *out, unsigned int size)
         led2.Set(0.0f);
     }
 
+    // apply volume and compression directly to input
+    const float vol = volume_in.Process();
+    static float input_preprocessed[AUDIO_BLOCKSIZE];
+    input_compressor.SetRatio(compression_ratio.Process());
+    input_compressor.SetThreshold(compression_threshold.Process());
+    for (int i = 0; i < AUDIO_BLOCKSIZE; i++) {
+        input_preprocessed[i] = input_compressor.Process(in[i * 2] * vol);
+    }
+
     // update state of loop machinery
     if (loop_state.state == RECORD_STATE_IDLE) {
         for (size_t i = 0; i < size; i += 2) {
-            out[i] = in[i];
-            out[i + 1] = in[i + 1];
+            out[i] = input_preprocessed[i/2];
+            out[i + 1] = input_preprocessed[i/2];
         }
     } else if (loop_state.state == RECORD_STATE_INITIAL_LOOP) {
         // write the input into the stored buffer. keep track of the size of the loop buffer.
-
         for (size_t i = 0; i < size; i += 2) {
-            out[i] = in[i];
-            out[i + 1] = in[i + 1];
+            out[i] = input_preprocessed[i/2];
+            out[i + 1] = input_preprocessed[i/2];
 
-            base_buff[loop_state.size] = in[i];
+            base_buff[loop_state.size] = input_preprocessed[i/2];
 
             loop_state.size++;
         }
     } else if (loop_state.state == RECORD_STATE_OVERDUB) {
         // overlay the stored buffer on the output, then accumulate the input into the memory.
-
         for (size_t i = 0; i < size; i += 2) {
-            out[i] = in[i] + base_buff[loop_state.head];
-            out[i + 1] = in[i + 1] + base_buff[loop_state.head];
+            out[i] = input_preprocessed[i/2] + base_buff[loop_state.head];
+            out[i + 1] = input_preprocessed[i/2] + base_buff[loop_state.head];
 
-            base_buff[loop_state.head] += in[i];
+            base_buff[loop_state.head] += input_preprocessed[i/2];
 
             loop_state.head++;
             if (loop_state.head == loop_state.size) loop_state.head = 0;
@@ -121,8 +135,8 @@ void callback(const float *in, float *out, unsigned int size)
         // just overlay the stored buffer on the output.
 
         for (size_t i = 0; i < size; i += 2) {
-            out[i] = in[i] + base_buff[loop_state.head];
-            out[i + 1] = in[i + 1] + base_buff[loop_state.head];
+            out[i] = input_preprocessed[i/2] + base_buff[loop_state.head];
+            out[i + 1] = input_preprocessed[i/2] + base_buff[loop_state.head];
 
             loop_state.head++;
             if (loop_state.head == loop_state.size) loop_state.head = 0;
@@ -141,7 +155,12 @@ int main(void)
 
     hw.Init();
     samplerate = hw.AudioSampleRate();
-    hw.SetAudioBlockSize(2 * AUDIO_BLOCKSIZE);
+    hw.SetAudioBlockSize(AUDIO_BLOCKSIZE);
+
+    // knobs
+    volume_in.Init(hw.knob[Terrarium::KNOB_1], 0.f, 1.f, Parameter::LINEAR);
+    compression_ratio.Init(hw.knob[Terrarium::KNOB_2], 1.f, 40.f, Parameter::LINEAR);
+    compression_threshold.Init(hw.knob[Terrarium::KNOB_2], 0.f, -80.f, Parameter::EXPONENTIAL);
 
     led1.Init(hw.seed.GetPin(Terrarium::LED_1), false);
     led2.Init(hw.seed.GetPin(Terrarium::LED_2), false);
